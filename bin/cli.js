@@ -1,38 +1,81 @@
 #!/usr/bin/env node
 const { execSync } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 
-const runCommand = command => {
-    try {
-        execSync(`${command}`, { stdio: 'inherit' });
-    } catch (e) {
-        console.error(`Failed to execute ${command}`, e);
-        return false;
-    }
-    return true;
-};
-
-const repoName = process.argv[2];
-const subdirectory = process.argv[3];
-
-if (!repoName || !subdirectory) {
-    console.error("Usage: create-project <repository-name> <subdirectory>");
-    process.exit(-1);
+if (process.argv.length < 4) {
+    console.log('You have to provide a name to your app and project template');
+    console.log('For example :');
+    console.log('    npx create-my-boilerplate my-app next-ts');
+    process.exit(1);
 }
 
-const gitCloneCommand = `git clone --depth 1 --single-branch --branch main https://github.com/piyush-jaiswal-projects/project_templates ${repoName}`;
-const gitSparseCheckoutCommand = `cd ${repoName} && git config core.sparseCheckout true && echo "${subdirectory}/*" >> .git/info/sparse-checkout && git checkout main`;
-const installDepsCommand = `cd ${repoName}/${subdirectory} && npm install`;
+const projectName = process.argv[2];
+const projectTemplate = process.argv[3];
+const currentPath = process.cwd();
+const projectPath = path.join(currentPath, projectName);
+const git_repo = "https://github.com/piyush-jaiswal-projects/rapidstart";
 
-console.log(`Cloning the repository with name ${repoName}`);
-const checkOut = runCommand(gitCloneCommand);
-if (!checkOut) process.exit(-1);
+async function main() {
+    try {
+        switch (projectTemplate) {
+            case "react-js": break;
+            case "react-ts": break;
+            case "next-ts": break;
+            case "express-ts": break;
+            default: throw new Error("Invalid project template!")
+        }
+    } catch (error) {
+        console.log(`Invalid project template!`);
+        console.log("Valid templates: \n react-js \n react-ts \n next-ts \n express-ts \n");
+        process.exit(1)
+    }
 
-console.log(`Cloning the subdirectory ${subdirectory}`);
-const sparseCheckout = runCommand(gitSparseCheckoutCommand);
-if (!sparseCheckout) process.exit(-1);
+    try {
+        fs.mkdirSync(projectPath);
+    } catch (err) {
+        if (err.code === 'EEXIST') {
+            console.log(`The file ${projectName} already exist in the current directory, please give it another name.`);
+        } else {
+            console.log(error);
+        }
+        process.exit(1);
+    }
 
-console.log(`Installing dependencies in ${subdirectory}`);
-const installedDeps = runCommand(installDepsCommand);
-if (!installedDeps) process.exit(-1);
+    try {
+        console.log('Downloading files...');
+        execSync(`git clone --depth 1 ${git_repo} ${projectPath}`);
 
-console.log("Congratulations! You are ready. Follow the following commands to start");
+        process.chdir(projectPath);
+
+        console.log('Configuring sparse checkout...');
+        fs.writeFileSync('.git/info/sparse-checkout', `/${projectTemplate}/*\n`);
+        execSync('git config core.sparsecheckout true');
+        execSync('git read-tree -mu HEAD');
+
+        console.log('Moving files...');
+        const templatePath = path.join(projectPath, projectTemplate);
+        const files = fs.readdirSync(templatePath);
+
+        files.forEach(file => {
+            const srcPath = path.join(templatePath, file);
+            const destPath = path.join(projectPath, file);
+            fs.renameSync(srcPath, destPath);
+        });
+
+        fs.rmSync(templatePath, { recursive: true });
+
+        console.log('Installing dependencies...');
+        execSync('npm install');
+
+        console.log('Removing unwanted files');
+        execSync('npx rimraf ./.git');
+
+        console.log('The installation is done, this is ready to use !');
+
+    } catch (error) {
+        console.log(error);
+        execSync(`rm -rf ${projectPath}`)
+    }
+}
+main();
